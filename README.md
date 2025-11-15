@@ -1,5 +1,7 @@
 # Agent Run using the terminal
 ```
+cd ./src
+
 adk run ./movie-ticketing-agent
 
 Running agent movie_ticketing_agent, type exit to exit.

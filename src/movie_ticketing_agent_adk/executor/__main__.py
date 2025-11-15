@@ -39,8 +39,8 @@ async def setup_server(host: str, port: int):
         agent_executor = await MovieTicketingAgentExecutor.initialize(
             agent=movie_ticketing_agent,
             # tools=await movie_ticketing_mcp_toolset.get_tools(),
-            stream_mode="messages",
-            # stream_mode="values",
+            # stream_mode="messages",
+            stream_mode="values",
         )
         capabilities = AgentCapabilities(
             streaming=True if agent_executor.stream_mode == "messages" else False,

@@ -21,15 +21,12 @@ from a2a.utils import (
     new_task,
 )
 from a2a.utils.errors import ServerError
-from google.adk.tools.base_tool import BaseTool
 from google.adk.agents.llm_agent import LlmAgent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.tools.base_tool import BaseTool
+from google.genai import types
 
-# from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage, ToolMessageChunk
-# from langchain_core.runnables.config import RunnableConfig
-# from langchain_mcp_adapters.client import AIMessage
-# from langgraph.graph.state import CompiledStateGraph
-
-# from movie_catalog_agent_langgraph.agents.context import Context
 
 logger = logging.getLogger(__name__)
 
@@ -195,157 +192,35 @@ class MovieTicketingAgentExecutor(AgentExecutor):
         stream_mode: Literal["values", "messages"] = "messages",
     ) -> AsyncIterable[dict[str, Any]]:
         """Stream the agent response."""
-        inputs = {"messages": [("user", query)]}
-        config = RunnableConfig(
-            recursion_limit=10,
-        )
-        context = Context(
-            user_id=user_id,
-            thread_id=context_id,
+
+        session_service = InMemorySessionService()
+
+        await session_service.create_session(
+            app_name=self.agent.name, user_id=user_id, session_id=context_id
         )
 
-        response = self.agent.astream(
-            inputs, config, context=context, stream_mode=stream_mode
+        # Create a runner for agent
+        ticketing_runner = Runner(
+            agent=self.agent,
+            app_name=self.agent.name,
+            session_service=session_service,
         )
 
-        if stream_mode == "values":
-            async for chunk_message in response:
-                # item is a dict with keys: messages when stream_mode is "values"
-                chunk_message = chunk_message["messages"][-1]
-                if isinstance(chunk_message, AIMessage):
-                    # for first turn with tool calls
-                    if chunk_message.tool_calls and len(chunk_message.tool_calls) > 0:
-                        tool_names = ", ".join(
-                            [
-                                tool_call["name"]
-                                for tool_call in chunk_message.tool_calls
-                            ]
-                        )
+        user_content = types.Content(role="user", parts=[types.Part(text=query)])
 
-                        logger.debug(
-                            f"Looking up alert information... using tools: {tool_names}"
-                        )
-                        yield {
-                            "is_task_complete": False,
-                            "require_user_input": False,
-                            "content": f"Looking up alert information... using tools: {tool_names}",
-                        }
-                    # for first turn without tool calls or result for user query
-                    else:
-                        logger.debug("Processing user query with data from tools")
-                        yield {
-                            "is_task_complete": False,
-                            "require_user_input": False,
-                            "content": chunk_message.content,
-                        }
-                elif isinstance(chunk_message, ToolMessage):
-                    if chunk_message.status == "success":
-                        logger.debug("Data retrieved successfully")
-                        # TODO: consider adding tool message data to the content
-                        yield {
-                            "is_task_complete": False,
-                            "require_user_input": False,
-                            "content": "Data retrieved successfully",
-                        }
-                    elif chunk_message.status == "error":
-                        logger.warning(
-                            f"Error retrieving data. Error: {chunk_message.content}"
-                        )
-                        yield {
-                            "is_task_complete": False,
-                            "require_user_input": True,
-                            "content": f"Error retrieving data. Error: {chunk_message.content}",
-                        }
-                elif isinstance(chunk_message, HumanMessage):
-                    ...
-                else:
-                    logger.warning(f"Unknown message type: {type(chunk_message)}")
-                    yield {
-                        "is_task_complete": False,
-                        "require_user_input": True,
-                        "content": (
-                            "We are unable to process your request at the moment. "
-                            "Please try again."
-                        ),
-                    }
+        final_response_content = None
+        async for event in ticketing_runner.run_async(
+            user_id=user_id, session_id=context_id, new_message=user_content
+        ):
+            logger.info(f"Event: {event}")
 
-            logger.info(f"{self.agent.name} Task completed")
-            yield {
-                "is_task_complete": True,
-                "require_user_input": False,
-                "content": "Task completed",
-            }
-        elif stream_mode == "messages":
-            async for chunk_message, _ in response:
-                # item is a message object (AIMessageChunk, ToolMessage, HumanMessage)
-                if isinstance(chunk_message, AIMessageChunk):
-                    if chunk_message.content:
-                        if isinstance(chunk_message.content, str):
-                            yield {
-                                "is_task_complete": False,
-                                "require_user_input": False,
-                                "content": chunk_message.content,
-                            }
-                        elif isinstance(chunk_message.content, list):
-                            for content in chunk_message.content:
-                                if isinstance(content, str):
-                                    yield {
-                                        "is_task_complete": False,
-                                        "require_user_input": False,
-                                        "content": content,
-                                    }
-                                elif isinstance(content, dict):
-                                    if content.get("type") == "text":
-                                        yield {
-                                            "is_task_complete": False,
-                                            "require_user_input": False,
-                                            "content": content.get("text"),
-                                        }
-                                else:
-                                    raise ValueError(
-                                        f"Unknown content type: {type(content)}"
-                                    )
-                    if chunk_message.tool_call_chunks:
-                        # TODO: consider adding tool call chunk to the content
-                        for tool_call_chunk in chunk_message.tool_call_chunks:
-                            if tool_call_chunk["id"]:
-                                ...
-                            if tool_call_chunk["name"]:
-                                ...
-                            if tool_call_chunk["args"]:
-                                ...
-                elif isinstance(chunk_message, ToolMessage):
-                    if chunk_message.status == "success":
-                        # TODO: consider adding tool message data to the content
-                        yield {
-                            "is_task_complete": False,
-                            "require_user_input": False,
-                            "content": "Data retrieved successfully\n",
-                        }
-                    elif chunk_message.status == "error":
-                        yield {
-                            "is_task_complete": False,
-                            "require_user_input": True,
-                            "content": f"Error retrieving data. Error: {chunk_message.content}",
-                        }
-                elif isinstance(chunk_message, HumanMessage):
-                    ...
-                elif isinstance(chunk_message, ToolMessageChunk):
-                    ...
-                else:
-                    logger.warning(f"Unknown message type: {type(chunk_message)}")
-                    yield {
-                        "is_task_complete": False,
-                        "require_user_input": True,
-                        "content": (
-                            "We are unable to process your request at the moment. "
-                            "Please try again."
-                        ),
-                    }
+            # print(f"Event: {event.type}, Author: {event.author}") # Uncomment for detailed logging
+            if event.is_final_response() and event.content and event.content.parts:
+                final_response_content = event.content.parts[0].text
 
-            logger.info(f"{self.agent.name} Task completed")
-            yield {
-                "is_task_complete": True,
-                "require_user_input": False,
-                "content": "Task has been completed successfully",
-            }
+                logger.info(f"{self.agent.name} Task completed")
+                yield {
+                    "is_task_complete": True,
+                    "require_user_input": False,
+                    "content": final_response_content,
+                }

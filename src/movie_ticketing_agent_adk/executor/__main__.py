@@ -100,6 +100,5 @@ async def main():
     await server.serve()
 
 
-if __name__ == "__main__":
-    # Initialize server in the main async context
+def run():
     asyncio.run(main())

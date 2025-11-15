@@ -1,11 +1,13 @@
+# Install dependency
+```
+us sync
+```
+
 # Agent Run using the terminal
 ```
-cd ./src
+cd src/movie_ticketing_agent_adk
 
-adk run ./movie-ticketing-agent
-
-Running agent movie_ticketing_agent, type exit to exit.
-[user]: 
+adk run ./movie_ticketing_agent
 ```
 
 # Agent Run using the web playground
@@ -13,8 +15,7 @@ Running agent movie_ticketing_agent, type exit to exit.
 adk web --port 9200
 ```
 
-
-# Create a new agent
+# Run A2A Remote Agent
 ```
-adk create ./agent-path
+uv run movie-ticketing-remote-agent
 ```

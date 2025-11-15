@@ -3,6 +3,11 @@
 us sync
 ```
 
+# Setup LLM API Key
+```
+cp .env.example .env
+```
+
 # Agent Run using the terminal
 ```
 cd src/movie_ticketing_agent_adk

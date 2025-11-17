@@ -1,6 +1,6 @@
 # Install dependency
 ```
-us sync
+uv sync
 ```
 
 # Setup LLM API Key

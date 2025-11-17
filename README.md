@@ -17,7 +17,7 @@ adk run ./movie_ticketing_agent
 
 # Agent Run using the web playground
 ```
-adk web --port 9200
+adk web --port 9200 --host 0.0.0.0
 ```
 
 # Run A2A Remote Agent
